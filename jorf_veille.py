@@ -56,10 +56,7 @@ import requests
 import datetime as dt
 import unicodedata
 
-try:
-    from config_piste import PISTE_CLIENT_ID, PISTE_CLIENT_SECRET
-except ImportError:
-    PISTE_CLIENT_ID = PISTE_CLIENT_SECRET = None
+from identifiants import PISTE_CLIENT_ID, PISTE_CLIENT_SECRET
 
 TOKEN_URL = "https://oauth.piste.gouv.fr/api/oauth/token"
 API_BASE  = "https://api.piste.gouv.fr/dila/legifrance/lf-engine-app"
