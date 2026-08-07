@@ -3,7 +3,7 @@ name: Veille institutionnelle
 on:
   schedule:
     # 6h00 UTC = 8h00 heure de Paris (été). Ajuster à '0 7 * * *' en hiver.
-    - cron: '0 8 * * *'
+    - cron: '0 6 * * *'
   workflow_dispatch:   # permet aussi de lancer manuellement depuis GitHub
 
 jobs:
