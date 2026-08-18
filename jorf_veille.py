@@ -3,13 +3,9 @@
 """
 MODULE JORF v2 — Veille du Journal Officiel via l'API Légifrance (PISTE)
 =======================================================================
-Deux logiques combinées (un texte remonte s'il correspond à L'UNE OU L'AUTRE) :
-
-  1) MINISTÈRES CIBLÉS : tout ce qui émane du Premier ministre et du ministère
-     de la Culture, repéré via le PRÉFIXE du code NOR (4 lettres = l'émetteur).
-
-  2) MOTS-CLÉS TRANSVERSES : sujets qui vous intéressent quel que soit l'émetteur
-     (ex. ordre du jour des assemblées), cherchés dans l'intitulé.
+MINISTÈRES CIBLÉS : tout ce qui émane du ministère de la Culture, repéré
+via le PRÉFIXE du code NOR (4 lettres = l'émetteur). Le Premier ministre
+est volontairement exclu (trop de bruit : nominations, décrets divers...).
 
 Prérequis :  pip install requests   + config_piste.py rempli.
 
@@ -19,33 +15,18 @@ Test / diagnostic :  python3 jorf_veille.py
 """
 
 # =============================================================================
-#  VVV   1) MINISTERES CIBLES (par prefixe de code NOR)   VVV
+#  VVV   MINISTERES CIBLES (par prefixe de code NOR)   VVV
 # =============================================================================
 #  Les 4 premieres lettres du NOR identifient l'emetteur. On garde un texte si
 #  son NOR COMMENCE par l'un de ces prefixes.
 #  /!\ Les prefixes ci-dessous sont a CONFIRMER au 1er lancement grace au
 #     diagnostic en bas d'ecran (il liste les prefixes reels du JO du jour).
 #  Pour ajouter un ministere : ajoutez une ligne "XXX" (prefixe), une virgule.
+#  Le Premier ministre (prefixe "PRM") est exclu delibérement.
 # -----------------------------------------------------------------------------
 PREFIXES_NOR_CIBLES = [
-    "PRM",   # Premier ministre  (services du PM)
     "MIC",   # Ministere de la Culture
-    # "PREX", # (variante possible Premier ministre - a verifier au diagnostic)
     # "MICB", # (variante possible Culture - a verifier au diagnostic)
-]
-
-# =============================================================================
-#  VVV   2) MOTS-CLES TRANSVERSES (dans l'intitule, tout emetteur)   VVV
-# =============================================================================
-#  Un mot ou une expression par ligne, entre guillemets, suivi d'une virgule.
-#  Accents/casse ignores. Laissez [] si vous n'en voulez pas.
-# -----------------------------------------------------------------------------
-MOTS_CLES_TRANSVERSES = [
-    "ordre du jour",
-    "assemblee nationale",
-    "senat",
-    "audiovisuel",
-    "Institut national de l'audiovisuel",
 ]
 
 # =============================================================================
@@ -54,19 +35,12 @@ MOTS_CLES_TRANSVERSES = [
 
 import requests
 import datetime as dt
-import unicodedata
 
 from identifiants import PISTE_CLIENT_ID, PISTE_CLIENT_SECRET
 
 TOKEN_URL = "https://oauth.piste.gouv.fr/api/oauth/token"
 API_BASE  = "https://api.piste.gouv.fr/dila/legifrance/lf-engine-app"
 JORF_JOURS = 1
-
-
-def _normaliser(texte):
-    texte = (texte or "").lower()
-    texte = unicodedata.normalize("NFD", texte)
-    return "".join(c for c in texte if unicodedata.category(c) != "Mn")
 
 
 def obtenir_token():
@@ -131,16 +105,10 @@ def rechercher_jorf(token, jours=JORF_JOURS):
 
 def _retenu(article):
     nor = article.get("nor", "")
-    if nor and any(nor.startswith(p.upper()) for p in PREFIXES_NOR_CIBLES):
-        return True
-    if MOTS_CLES_TRANSVERSES:
-        t = _normaliser(article["titre"])
-        if any(_normaliser(m) in t for m in MOTS_CLES_TRANSVERSES):
-            return True
-    return False
+    return bool(nor and any(nor.startswith(p.upper()) for p in PREFIXES_NOR_CIBLES))
 
 
-def collecter_jorf(mots_cles=None):
+def collecter_jorf():
     if not PISTE_CLIENT_ID or PISTE_CLIENT_ID.startswith("COLLEZ"):
         print("[JORF] Identifiants PISTE manquants dans config_piste.py")
         return []
@@ -163,7 +131,7 @@ if __name__ == "__main__":
             bruts = rechercher_jorf(token)
             print(str(len(bruts)) + " textes au JO sur les " + str(JORF_JOURS) + " dernier(s) jour(s).\n")
             retenus = [a for a in bruts if _retenu(a)]
-            print("-> " + str(len(retenus)) + " retenus (ministeres cibles + mots-cles) :")
+            print("-> " + str(len(retenus)) + " retenus (ministeres cibles) :")
             for a in retenus[:25]:
                 print("   . [" + (a.get('nor','????')[:4]) + "] " + a['titre'][:75])
             print("\n--- Diagnostic prefixes NOR du jour (pour completer la liste) ---")
