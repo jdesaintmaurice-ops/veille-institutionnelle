@@ -360,4 +360,62 @@ def main():
         except Exception as e:
             print(f"[ERREUR] JORF — {e}")
     else:
-        print("[SKIP] JORF — m
+        print("[SKIP] JORF — module jorf_veille.py indisponible.")
+
+    # --- 3) Réunions de commissions culture (parlementaires) ---
+    if COMMISSIONS_DISPO:
+        try:
+            bruts_com = collecter_commissions()
+            nouveaux = [a for a in bruts_com if a["lien"] + a["titre"] not in memoire]
+            print(f"[OK]   Commissions culture — {len(bruts_com)} réunion(s), "
+                  f"{len(nouveaux)} nouvelle(s).")
+            # Clé mémoire = lien+titre (plusieurs réunions partagent le même lien)
+            resultats.append(("Réunions commissions culture", nouveaux))
+            for a in nouveaux:
+                a["_cle"] = a["lien"] + a["titre"]
+        except Exception as e:
+            print(f"[ERREUR] Commissions — {e}")
+    else:
+        print("[SKIP] Commissions — module indisponible.")
+
+    # --- Génération / envoi ---
+    html, total = generer_mail_html(resultats)
+    with open("mail_veille.html", "w", encoding="utf-8") as f:
+        f.write(html)
+    print(f"\nMail généré => mail_veille.html ({total} nouvelles publications retenues)")
+
+    # On ne marque les articles comme "déjà vus" qu'une fois l'envoi confirmé
+    # (ou en l'absence d'envoi, ex. exécution locale de test) : si l'envoi
+    # échoue, les articles doivent rester "nouveaux" pour être retentés au
+    # prochain passage plutôt que d'être perdus silencieusement.
+    memoire_a_jour = True
+
+    if ENVOI_ACTIF:
+        if total == 0:
+            print("Envoi : rien de neuf, pas de mail envoyé.")
+        else:
+            try:
+                sujet = f"Veille institutionnelle — {dt.date.today().strftime('%d/%m/%Y')} ({total})"
+                envoyer_mail(sujet, html)
+                print(f"Mail ENVOYÉ à {MAIL_DESTINATAIRE}.")
+            except Exception as e:
+                print(f"[ERREUR ENVOI] {e}")
+                memoire_a_jour = False
+    else:
+        print("Envoi désactivé (ENVOI_ACTIF = False). Ouvrez mail_veille.html pour prévisualiser.")
+
+    # --- Mise à jour mémoire ---
+    if memoire_a_jour:
+        maintenant = dt.datetime.now().isoformat()
+        for _, articles in resultats:
+            for a in articles:
+                cle = a.get("_cle", a["lien"])
+                memoire[cle] = maintenant
+        memoire = purger_memoire(memoire, jours=30)
+        sauver_memoire(memoire)
+    else:
+        print("Mémoire NON mise à jour (échec de l'envoi) — ces articles seront représentés au prochain passage.")
+
+
+if __name__ == "__main__":
+    main()
