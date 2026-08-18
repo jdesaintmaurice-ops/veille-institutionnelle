@@ -214,8 +214,31 @@ def purger_memoire(memoire, jours=30):
             if dt.datetime.fromisoformat(d) > limite}
 
 
+def fermer_bandeau_cookies(page):
+    """Ferme un éventuel bandeau de consentement cookies (CMP Didomi, courant
+    sur les sites du groupe France Télévisions dont franceinfo.fr). Tant que
+    ce bandeau reste affiché, certains sites ne chargent pas la grille
+    d'articles complète et ne renvoient qu'un contenu statique/par défaut —
+    ce qui peut faire croire que la page ne change jamais d'un jour à l'autre.
+    """
+    for selecteur in (
+        "#didomi-notice-agree-button",
+        "button#onetrust-accept-btn-handler",
+        "button[aria-label*='Accepter']",
+        "button[aria-label*='accepter']",
+    ):
+        try:
+            page.click(selecteur, timeout=2000)
+            page.wait_for_timeout(500)
+            return True
+        except Exception:
+            continue
+    return False
+
+
 def collecter_source(page, source):
     page.goto(source["url"], timeout=60000, wait_until="domcontentloaded")
+    fermer_bandeau_cookies(page)
     page.wait_for_timeout(3000)
     attr = source["attribut_titre"]
     if attr:
@@ -230,6 +253,7 @@ def collecter_source(page, source):
         if titre and lien and lien not in vus:
             vus.add(lien)
             uniques.append({"titre": titre, "lien": lien})
+    print(f"       (titre de la page chargée : {page.title()!r})")
     return uniques
 
 
@@ -336,52 +360,4 @@ def main():
         except Exception as e:
             print(f"[ERREUR] JORF — {e}")
     else:
-        print("[SKIP] JORF — module jorf_veille.py indisponible.")
-
-    # --- 3) Réunions de commissions culture (parlementaires) ---
-    if COMMISSIONS_DISPO:
-        try:
-            bruts_com = collecter_commissions()
-            nouveaux = [a for a in bruts_com if a["lien"] + a["titre"] not in memoire]
-            print(f"[OK]   Commissions culture — {len(bruts_com)} réunion(s), "
-                  f"{len(nouveaux)} nouvelle(s).")
-            # Clé mémoire = lien+titre (plusieurs réunions partagent le même lien)
-            resultats.append(("Réunions commissions culture", nouveaux))
-            for a in nouveaux:
-                a["_cle"] = a["lien"] + a["titre"]
-        except Exception as e:
-            print(f"[ERREUR] Commissions — {e}")
-    else:
-        print("[SKIP] Commissions — module indisponible.")
-
-    # --- Mise à jour mémoire ---
-    maintenant = dt.datetime.now().isoformat()
-    for _, articles in resultats:
-        for a in articles:
-            cle = a.get("_cle", a["lien"])
-            memoire[cle] = maintenant
-    memoire = purger_memoire(memoire, jours=30)
-    sauver_memoire(memoire)
-
-    # --- Génération / envoi ---
-    html, total = generer_mail_html(resultats)
-    with open("mail_veille.html", "w", encoding="utf-8") as f:
-        f.write(html)
-    print(f"\nMail généré => mail_veille.html ({total} nouvelles publications retenues)")
-
-    if ENVOI_ACTIF:
-        if total == 0:
-            print("Envoi : rien de neuf, pas de mail envoyé.")
-        else:
-            try:
-                sujet = f"Veille institutionnelle — {dt.date.today().strftime('%d/%m/%Y')} ({total})"
-                envoyer_mail(sujet, html)
-                print(f"Mail ENVOYÉ à {MAIL_DESTINATAIRE}.")
-            except Exception as e:
-                print(f"[ERREUR ENVOI] {e}")
-    else:
-        print("Envoi désactivé (ENVOI_ACTIF = False). Ouvrez mail_veille.html pour prévisualiser.")
-
-
-if __name__ == "__main__":
-    main()
+        print("[SKIP] JORF — m
