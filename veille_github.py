@@ -5,7 +5,6 @@ VEILLE INSTITUTIONNELLE — version Playwright v3
 ===============================================
 Nouveautés v3 :
   • Source JORF intégrée (via l'API Légifrance, module jorf_veille.py)
-  • Liste de mots-clés DÉDIÉE au JO (distincte des autres sources)
   • Intègre les correctifs : chargement domcontentloaded, sélecteur IGF nettoyé,
     source Franceinfo.
 
@@ -17,60 +16,6 @@ Prérequis :
 Lancement :
     python3 veille_playwright_v3.py
 """
-
-# =============================================================================
-#  ⬇⬇⬇   MOTS-CLÉS — SOURCES WEB (Playwright)   ⬇⬇⬇
-# =============================================================================
-#  Appliqués à toutes les sources SAUF le JORF (qui a sa propre liste plus bas).
-#  Liste VIDE ( [] ) => tout afficher.
-# -----------------------------------------------------------------------------
-MOTS_CLES_GLOBAUX = [
-    "INA",
-    "Institut national de l'audiovisuel",
-    "Inathèque",
-    "audiovisuel",
-    "archives audiovisuelles",
-    "patrimoine audiovisuel",
-    "dépôt légal",
-    "numérisation",
-    "audiovisuel public",
-    "France Télévisions",
-    "Radio France",
-    "France Médias Monde",
-    "ARCOM",
-    "réforme de l'audiovisuel",
-    "holding audiovisuel",
-    "ministère de la Culture",
-    "politique culturelle",
-    "financement de la culture",
-    "CNC",
-]
-
-MOTS_CLES_PAR_SOURCE = {
-    # "Acteurs Publics": ["fonction publique", "cour des comptes"],
-}
-
-# =============================================================================
-#  ⬇⬇⬇   MOTS-CLÉS DÉDIÉS AU JORF (plus stricts)   ⬇⬇⬇
-# =============================================================================
-#  Le JO est très juridique/volumineux : on y met des termes précis pour
-#  éviter les faux positifs (ex. "communication" attrape des conventions
-#  collectives sans rapport). Liste VIDE => tout le JO passe (déconseillé).
-# -----------------------------------------------------------------------------
-MOTS_CLES_JORF = [
-    "audiovisuel",
-    "Institut national de l'audiovisuel",
-    "France Télévisions",
-    "Radio France",
-    "France Médias Monde",
-    "ARCOM",
-    "dépôt légal",
-    "cinéma",
-    "cinématographique",
-    "patrimoine",
-    "propriété littéraire et artistique",
-    "droit d'auteur",
-]
 
 # =============================================================================
 #  ⬇⬇⬇   RÉGLAGES DE L'ENVOI DU MAIL   ⬇⬇⬇
@@ -95,7 +40,6 @@ MAIL_DESTINATAIRE = _MD or _GU or "votre.adresse@gmail.com"
 
 FENETRE_HEURES = 24
 FICHIER_MEMOIRE = "deja_vus.json"
-AFFICHER_ECARTES = True
 
 # -----------------------------------------------------------------------------
 #  SOURCES WEB (Playwright)
@@ -156,7 +100,6 @@ SOURCES = [
 # =============================================================================
 #  MOTEUR
 # =============================================================================
-import unicodedata
 import datetime as dt
 import json
 import os
@@ -174,23 +117,6 @@ try:
     COMMISSIONS_DISPO = True
 except Exception:
     COMMISSIONS_DISPO = False
-
-
-def normaliser(texte: str) -> str:
-    texte = (texte or "").lower()
-    texte = unicodedata.normalize("NFD", texte)
-    return "".join(c for c in texte if unicodedata.category(c) != "Mn")
-
-
-def mots_cles_pour(nom: str):
-    return MOTS_CLES_PAR_SOURCE.get(nom, MOTS_CLES_GLOBAUX)
-
-
-def intitule_retenu(titre: str, mots_cles) -> bool:
-    if not mots_cles:
-        return True
-    t = normaliser(titre)
-    return any(normaliser(m) in t for m in mots_cles)
 
 
 def charger_memoire():
@@ -257,21 +183,10 @@ def collecter_source(page, source):
     return uniques
 
 
-def traiter_source(nom, bruts, mots, memoire, resultats):
-    """Applique filtre mots-clés + nouveauté, affiche le bilan, stocke le résultat."""
-    retenus_mots, ecartes_mots = [], []
-    for a in bruts:
-        (retenus_mots if intitule_retenu(a["titre"], mots) else ecartes_mots).append(a)
-    nouveaux = [a for a in retenus_mots if a["lien"] not in memoire]
-    print(f"[OK]   {nom} — {len(bruts)} trouvés, "
-          f"{len(retenus_mots)} passent les mots-clés, "
-          f"{len(nouveaux)} nouveaux (24h).")
-    if AFFICHER_ECARTES and ecartes_mots:
-        print(f"       — écartés par les mots-clés ({len(ecartes_mots)}) :")
-        for a in ecartes_mots[:15]:
-            print(f"           · {a['titre'][:75]}")
-        if len(ecartes_mots) > 15:
-            print(f"           … et {len(ecartes_mots) - 15} autres")
+def traiter_source(nom, bruts, memoire, resultats):
+    """Applique le filtre de nouveauté, affiche le bilan, stocke le résultat."""
+    nouveaux = [a for a in bruts if a["lien"] not in memoire]
+    print(f"[OK]   {nom} — {len(bruts)} trouvés, {len(nouveaux)} nouveaux (24h).")
     resultats.append((nom, nouveaux))
 
 
@@ -280,8 +195,7 @@ def generer_mail_html(resultats):
     out = [
         "<html><body style='font-family:Arial,sans-serif;color:#1a1a1a;'>",
         f"<h1 style='font-size:20px;'>Veille institutionnelle — {date_jour}</h1>",
-        f"<p style='color:#555;'>Nouvelles publications des dernières {FENETRE_HEURES} h "
-        "correspondant à vos mots-clés.</p>",
+        f"<p style='color:#555;'>Nouvelles publications des dernières {FENETRE_HEURES} h.</p>",
     ]
     total = 0
     for nom, articles in resultats:
@@ -294,7 +208,7 @@ def generer_mail_html(resultats):
                        f"style='color:#0b57d0;text-decoration:none;'>{a['titre']}</a></li>")
         out.append("</ul>")
     if total == 0:
-        out.append("<p><em>Aucune nouvelle publication ne correspond à vos mots-clés aujourd'hui.</em></p>")
+        out.append("<p><em>Aucune nouvelle publication aujourd'hui.</em></p>")
     out.append("</body></html>")
     return "\n".join(out), total
 
@@ -344,17 +258,17 @@ def main():
             except Exception as e:
                 print(f"[ERREUR] {nom} — {e}")
                 continue
-            traiter_source(nom, bruts, mots_cles_pour(nom), memoire, resultats)
+            traiter_source(nom, bruts, memoire, resultats)
         browser.close()
 
     # --- 2) Source JORF (API Légifrance) ---
     if JORF_DISPO:
         try:
-            # On récupère le JO déjà filtré par la liste dédiée MOTS_CLES_JORF.
-            bruts_jorf = collecter_jorf(mots_cles=MOTS_CLES_JORF)
+            # On récupère le JO déjà filtré par ministère ciblé (voir jorf_veille.py).
+            bruts_jorf = collecter_jorf()
             # Filtre "nouveauté" appliqué comme aux autres sources.
             nouveaux = [a for a in bruts_jorf if a["lien"] not in memoire]
-            print(f"[OK]   Journal Officiel (JORF) — {len(bruts_jorf)} retenus (mots-clés JO), "
+            print(f"[OK]   Journal Officiel (JORF) — {len(bruts_jorf)} retenus (ministères ciblés), "
                   f"{len(nouveaux)} nouveaux (24h).")
             resultats.append(("Journal Officiel (JORF)", nouveaux))
         except Exception as e:
