@@ -1,5 +1,6 @@
 name: Veille institutionnelle
 
+
 on:
   schedule:
     # 6h00 UTC = 8h00 heure de Paris (été). Ajuster à '0 7 * * *' en hiver.
